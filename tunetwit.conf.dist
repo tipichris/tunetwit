@@ -1,0 +1,49 @@
+#################################################################################
+# This is the configuration file for tunetwit, a bot to your MPD listening 
+# Twitter. 
+#
+# This is a perl file and must conform to perl syntax
+
+
+#################################################################################
+# Configuration
+#################################################################################
+
+# TuneTwit's consumer API key for twitter. You need to get these from 
+# dev.twitter.com
+
+$consumerkey = "";
+$consumersecret = "";
+
+# Where to find MPD
+$mpdhost = 'localhost';
+# $mpdport
+# $mpdpassword
+
+# the format of the tweet. For details of the format codes
+# see docs for Audio::MPD::Common::Item::Song 
+$format = 'Listening to %t by %a';
+
+# interval (in seconds) between polls of MPD
+$pollint = 3;
+
+## Logging
+#  set to 1 to enable logging
+$logging = 0; 
+#  location of log file. Default is tunetwit.log in the same directory
+#  as the script. Must be writable by user that tunetwit is run as
+# $logFile = '/var/log/tunetwit/tunetwit.log';
+
+# set to 1 to run in debug (don't detach and daemonize)
+$debug = 0;
+
+# location of PID file. Default is tunetwit.pid in the same directory
+#  as the script. Must be writable by user that tunetwit is run as
+# $pidFile = '/var/run/tunetwit/tunetwit.pid';
+
+#################################################################################
+# End configuration
+#################################################################################
+
+# make sure we return true
+1;

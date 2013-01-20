@@ -1,0 +1,307 @@
+#!/usr/bin/perl -T
+
+####### TuneTwit ##########
+# A simple bot to post what you're listening to on MPD to Twitter. 
+##
+# Synopsis
+# tunetwit [-d][-s][-c /path/to/conf.file]
+#       -d  debug mode, do not daemonize
+#       -c  specify alternate config file (default is tunetwit.conf in script directory)
+#       -o  configure OAuth 
+#
+# tunetwit is copyright Chris Hastie 2013 @tipichris
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# [http://www.fsf.org/licenses/gpl.txt]
+
+# anything slurped in from the conf file needs declaring here
+use vars qw($mpdhost $mpdport $mpdpassword 
+  $format $pollint $logging $consumerkey $consumersecret
+  $logFile $pidFile $debug $path );
+
+my $version = '0.1.0';
+
+use strict;          # this turns on strict error checking
+use Audio::MPD;
+use warnings;
+use POSIX;
+use File::Pid;
+use Getopt::Std;
+use POSIX qw(setsid);
+use Net::Twitter::Lite;
+
+# a nice safe path
+$ENV{'PATH'} = '';
+
+# get the path to the script ready for use in setting defaults
+BEGIN {
+  my $mycmd;
+  if ($0 =~ m{^([A-Za-z0-9/._=+-]+)$}) {
+    $mycmd = $1 # untaint
+  }
+  $path = substr($mycmd, 0, rindex( $mycmd,'/'));
+}
+
+# default location of conf file
+my $conffile = $path . "/tunetwit.conf";
+
+my %clopts;
+getopts('doc:', \%clopts);
+
+$conffile = $clopts{'c'} if $clopts{'c'};
+$conffile = $1  if $conffile =~ m{^([A-Za-z0-9/._=+-]+)$}; # untaint
+
+my $daemonName = 'tunetwit';
+my $dieNow = 0;                                     # used for "infinte loop" construct - allows daemon mode to gracefully exit
+
+# set some defaults                           
+$logFile = $path . '/' . $daemonName . ".log";
+$pidFile = $path . '/' . $daemonName . ".pid";
+$debug = 0;
+$mpdhost = 'localhost';
+$pollint = 3;
+$logging = 1; 
+$format = 'Listening to %t by %a';
+
+# slurp in the configuration file
+do $conffile;
+
+# override $debug if necessary
+$debug = 1 if $clopts{'d'};
+
+unless ( $consumerkey && $consumersecret ) {
+  print "*******************************************************************\n";
+  print 'You have not configured values for $consumerkey and $consumersecret' . "\n";
+  print "in $conffile. You must get these values from \n";
+  print "http://dev.twitter.com\n";
+  print "*******************************************************************\n";
+  exit;
+}
+
+my $authdir = $path . "/.oauth";
+# if the oauth directory doesn't exist, try to create it.
+if (! -d $authdir) {
+  mkdir $authdir || die "Failed to make oauth directory $authdir: " . $@
+} 
+
+# Initiate the Net::Twitter::Lite object.
+my $twit = Net::Twitter::Lite->new(
+  consumer_key    => $consumerkey,
+  consumer_secret => $consumersecret,
+  clientname => 'Tweed',
+  clientver => $version,
+  legacy_lists_api => 0
+);
+
+if (exists($clopts{'o'})) {
+  setupoauth();
+  exit;
+}
+
+my ($access_token, $access_token_secret) = get_access_keys();
+unless ($access_token && $access_token_secret) {
+  die "Failed to retrieve access tokens\nPerhaps you need to run tunetwit -o to configure OAuth\n";
+}
+
+
+umask 0022;
+
+unless ($debug) {
+  defined( my $pid = fork ) or die "Can't fork: $!";
+  exit if $pid;
+
+  # dissociate this process from the controlling terminal that started it and stop being part
+  # of whatever process group this process was a part of.
+  POSIX::setsid() or die "Can't start a new session.";
+}
+
+# open log file if needed
+if ($logging) {
+  open LOG, ">>$logFile";
+  select((select(LOG), $|=1)[0]); # make the log file "hot" - turn off buffering
+}
+
+
+# callback signal handler for signals.
+$SIG{INT} = $SIG{TERM} = $SIG{HUP} = \&signalHandler;
+$SIG{PIPE} = 'ignore';
+$SIG{__WARN__}  = \&logEntry;
+$SIG{__DIE__}  = sub { fatal_exit($_[0]); };
+
+# create pid file
+my $pidfile = File::Pid->new( { file => $pidFile, } );
+
+$pidfile->write or die "Can't write PID file $pidFile: $!";
+
+# Setup options for Audio::MPD
+my %opts;
+$opts{'host'} = $mpdhost if $mpdhost; 
+$opts{'port'} = $mpdhost if $mpdport; 
+$opts{'password'} = $mpdhost if $mpdpassword; 
+$opts{'conntype'} = 'reuse';
+
+my $mpd = Audio::MPD->new( %opts );
+
+# the last status we sent
+my $laststatus = '';
+
+# start the loop that does the work, checking MPD ever $pollint seconds
+until ($dieNow) {
+  my $song = $mpd->current;
+
+  my $status = $song->as_string( $format );
+  
+  if ($laststatus ne $status) {
+    logEntry ($status);
+    tweet ($status);
+    $laststatus = $status;
+  }
+  sleep $pollint;
+}
+
+#########################################################
+# tweet the status
+# -> status
+sub tweet {
+  my $status = shift;
+  $twit->access_token($access_token);
+  $twit->access_token_secret($access_token_secret);   
+   
+  unless($twit->authorized) {
+    logEntry ("ERROR: Authorisation error to Twitter\n");
+    die;
+  }
+   
+  if (length($status)  > 140 ) {
+    $status = substr ($status, 0, 140 - 4) . '...';
+  }
+  
+  my $twitresult = eval { 
+    local $SIG{__DIE__} = 'DEFAULT'; 
+    $twit->update($status) 
+  };
+  
+  logEntry ("ERROR updating twitter status: $@") if $@;
+}
+
+#########################################################
+# add a line to the log file
+# -> text to log
+sub logEntry {
+  my ($logText) = @_;
+  my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst ) = localtime(time);
+  my $dateTime = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $year + 1900, $mon + 1, $mday, $hour, $min, $sec;
+  if ($logging) {
+    print LOG "$dateTime $logText\n";
+  }
+  if ($debug) {
+    print STDERR $logText . "\n";
+  }
+}
+
+
+#########################################################
+# setup OAuth with Twitter
+# -> 
+# <- 1 (ok), 0 (error)
+sub setupoauth {
+  my $feedid = 'tunetwit';
+
+  
+  warn "Configuring OAuth\n" if $debug;
+
+  my $auth_url = eval { $twit->get_authorization_url };
+  unless ($auth_url) {
+    warn "Error getting authorisation URL\n";
+        return undef;
+  }
+  
+  print qq|
+##############################################################
+Setting up Tunetwit 
+
+To authorise Tunetwit to access your Twitter account, copy and 
+paste this address into your browser:
+
+$auth_url
+
+then authorise Tunetwit to access the Twitter account you wish
+to tweet this feed to. When you're done there, enter the PIN 
+and hit RETURN here.
+|;
+
+  my $pin = <STDIN>; # wait for input
+  chomp $pin;
+
+  my($access_token, $access_token_secret, $user_id, $screen_name) = eval { $twit->request_access_token(verifier => $pin) }; 
+  
+  unless ($access_token && $access_token_secret) {
+    warn "Error getting access token: $@";
+        return 0;
+  }
+  unless ($access_token && $access_token_secret) {
+    warn "Unexpected error getting access token";
+        return 0;
+  }
+  
+  print "Tunes will be posted to account: ", $user_id,
+    " (", $screen_name, ")\n";
+   
+   # save the data to the auth directory
+   unless (open (KEY, ">$authdir/$feedid.keys")) {
+      warn "Can't store the key file locally, $authdir/$feedid.keys, $!\n";
+          return undef;
+   }
+   print KEY $access_token . "\n" . $access_token_secret . "\n# " . $user_id . " " . $screen_name;
+   close KEY; 
+   chmod 0600, "$authdir/$feedid.keys";
+   return 1;
+}
+
+#########################################################
+# retrieve OAuth tokens from disk
+# -> 
+# <- $access_token, $access_token_secret
+sub get_access_keys {
+  unless (open (KEY, "<$authdir/tunetwit.keys")) {
+      warn "failed to open keys file,  $authdir/tunetwit.keys, $!\n";
+          return undef;
+  }
+  my $access_token = <KEY>;
+  chomp $access_token;
+  my $access_token_secret = <KEY>;
+  chomp $access_token_secret;  
+  return ($access_token, $access_token_secret);
+}
+
+#########################################################
+# Sig DIE handler
+# Log an error and abort.
+#
+sub fatal_exit {
+  logEntry( "FATAL ERROR: @_");
+  $dieNow = 1;
+  die "Fatal: @_";
+}
+
+#########################################################
+# catch signals and end the program if one is caught.
+sub signalHandler {
+  $dieNow = 1;    # this will cause the "infinite loop" to exit
+}
+
+#########################################################
+# do this stuff when exit() is called.
+END {
+  if ($logging) { close LOG }
+  $pidfile->remove if defined $pidfile;
+}
