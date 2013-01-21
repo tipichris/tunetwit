@@ -103,7 +103,7 @@ if (! -d $authdir) {
 my $twit = Net::Twitter::Lite->new(
   consumer_key    => $consumerkey,
   consumer_secret => $consumersecret,
-  clientname => 'Tweed',
+  clientname => 'TuneTwit',
   clientver => $version,
   legacy_lists_api => 0
 );
