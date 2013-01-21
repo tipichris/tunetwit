@@ -26,7 +26,7 @@
 # anything slurped in from the conf file needs declaring here
 use vars qw($mpdhost $mpdport $mpdpassword 
   $format $pollint $logging $consumerkey $consumersecret
-  $logFile $pidFile $debug $path );
+  $logFile $pidFile $retryint $debug $path );
 
 my $version = '0.1.0';
 
@@ -55,13 +55,18 @@ BEGIN {
 my $conffile = $path . "/tunetwit.conf";
 
 my %clopts;
-getopts('doc:', \%clopts);
+getopts('dsoc:', \%clopts);
 
 $conffile = $clopts{'c'} if $clopts{'c'};
 $conffile = $1  if $conffile =~ m{^([A-Za-z0-9/._=+-]+)$}; # untaint
 
+my $dryrun = 0;
+$dryrun = 1 if $clopts{'s'};
+
 my $daemonName = 'tunetwit';
 my $dieNow = 0;                                     # used for "infinte loop" construct - allows daemon mode to gracefully exit
+my $song = '';
+my $mpd = '';
 
 # set some defaults                           
 $logFile = $path . '/' . $daemonName . ".log";
@@ -69,6 +74,7 @@ $pidFile = $path . '/' . $daemonName . ".pid";
 $debug = 0;
 $mpdhost = 'localhost';
 $pollint = 3;
+$retryint = 30;
 $logging = 1; 
 $format = 'Listening to %t by %a';
 
@@ -133,7 +139,7 @@ if ($logging) {
 
 # callback signal handler for signals.
 $SIG{INT} = $SIG{TERM} = $SIG{HUP} = \&signalHandler;
-$SIG{PIPE} = 'ignore';
+$SIG{PIPE} = 'IGNORE';
 $SIG{__WARN__}  = \&logEntry;
 $SIG{__DIE__}  = sub { fatal_exit($_[0]); };
 
@@ -147,23 +153,47 @@ my %opts;
 $opts{'host'} = $mpdhost if $mpdhost; 
 $opts{'port'} = $mpdhost if $mpdport; 
 $opts{'password'} = $mpdhost if $mpdpassword; 
-$opts{'conntype'} = 'reuse';
+# $opts{'conntype'} = 'reuse';
 
-my $mpd = Audio::MPD->new( %opts );
+
+
+until ($mpd) {
+  $mpd = eval{ 
+    local $SIG{__DIE__} = 'DEFAULT'; 
+    Audio::MPD->new( %opts ) ;
+  };
+  last if $mpd;
+  logEntry ("ERROR connecting to MPD: $@") if $@;
+  sleep $retryint;
+}
 
 # the last status we sent
 my $laststatus = '';
 
 # start the loop that does the work, checking MPD ever $pollint seconds
 until ($dieNow) {
-  my $song = $mpd->current;
-
-  my $status = $song->as_string( $format );
   
-  if ($laststatus ne $status) {
-    logEntry ($status);
-    tweet ($status);
-    $laststatus = $status;
+  $song = '';
+  until ($song) {
+    $song = eval{ 
+      local $SIG{__DIE__} = 'DEFAULT'; 
+      $mpd->current ;
+    };
+    last if $song;
+    logEntry ("ERROR retrieving song: $@") if $@;
+    sleep $retryint;
+  }
+
+  # check type of $song as it may not be a reference if it was 
+  # set by signalHandler to break the loop
+  if ($song && ref($song) eq "Audio::MPD::Common::Item::Song") {
+    my $status = $song->as_string( $format );
+    logEntry("Debug: $status") if $debug;
+    if ($laststatus ne $status) {
+      logEntry ($status);
+      tweet ($status);
+      $laststatus = $status;
+    }
   }
   sleep $pollint;
 }
@@ -173,24 +203,28 @@ until ($dieNow) {
 # -> status
 sub tweet {
   my $status = shift;
-  $twit->access_token($access_token);
-  $twit->access_token_secret($access_token_secret);   
-   
-  unless($twit->authorized) {
-    logEntry ("ERROR: Authorisation error to Twitter\n");
-    die;
+  if ($dryrun) {
+    logEntry("Tweet: $status");
+  } else {
+    $twit->access_token($access_token);
+    $twit->access_token_secret($access_token_secret);   
+    
+    unless($twit->authorized) {
+      logEntry ("ERROR: Authorisation error to Twitter\n");
+      die;
+    }
+    
+    if (length($status)  > 140 ) {
+      $status = substr ($status, 0, 140 - 4) . '...';
+    }
+    
+    my $twitresult = eval { 
+      local $SIG{__DIE__} = 'DEFAULT'; 
+      $twit->update($status) 
+    };
+    
+    logEntry ("ERROR updating twitter status: $@") if $@;
   }
-   
-  if (length($status)  > 140 ) {
-    $status = substr ($status, 0, 140 - 4) . '...';
-  }
-  
-  my $twitresult = eval { 
-    local $SIG{__DIE__} = 'DEFAULT'; 
-    $twit->update($status) 
-  };
-  
-  logEntry ("ERROR updating twitter status: $@") if $@;
 }
 
 #########################################################
@@ -198,6 +232,7 @@ sub tweet {
 # -> text to log
 sub logEntry {
   my ($logText) = @_;
+  chomp ($logText);
   my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst ) = localtime(time);
   my $dateTime = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $year + 1900, $mon + 1, $mday, $hour, $min, $sec;
   if ($logging) {
@@ -296,7 +331,8 @@ sub fatal_exit {
 #########################################################
 # catch signals and end the program if one is caught.
 sub signalHandler {
-  $dieNow = 1;    # this will cause the "infinite loop" to exit
+  # break out of various loops
+  $song = $mpd = $dieNow = 1;    
 }
 
 #########################################################

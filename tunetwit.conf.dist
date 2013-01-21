@@ -27,6 +27,10 @@ $format = 'Listening to %t by %a';
 # interval (in seconds) between polls of MPD
 $pollint = 3;
 
+# interval (in seconds) to wait before retrying a failed connection to MPD
+$retryint = 30;
+
+
 ## Logging
 #  set to 1 to enable logging
 $logging = 0; 
