@@ -7,6 +7,7 @@
 # tunetwit [-d][-s][-c /path/to/conf.file]
 #       -d  debug mode, do not daemonize
 #       -c  specify alternate config file (default is tunetwit.conf in script directory)
+#       -s  simulate - don't actually tweet anything, just log what we would tweet
 #       -o  configure OAuth 
 #
 # tunetwit is copyright Chris Hastie 2013 @tipichris

@@ -8,9 +8,46 @@ Runs as a daemon.
 Synopsis
 tunetwit [-d][-s][-c /path/to/conf.file]
       -d  debug mode, do not daemonize
-      -c  specify alternate config file (default is tunetwit.conf in script directory)
+      -c  specify alternate config file (default is tunetwit.conf in 
+          script directory)
+      -s  simulate - don't actually tweet anything, just log what we 
+          would tweet
       -o  configure OAuth 
 
+INSTALLATION
+
+Make sure you have all the dependencies installed. 
+
+Copy tunetwit and tunetwit.conf.dist to a directory.
+
+Rename tunetwit.conf.dist to tunetwit.conf
+
+Fill in the blanks. You will need to log in at http://dev.twitter.com
+and register your application to get values for $consumerkey and 
+$consumersecret because Twitter doesn't allow these to be distributed 
+with Open Source software :(
+
+Make sure the directory in which tunetwit resides is writable by the 
+user it will run as - TuneTwit will create a directory .oauth here to 
+store your twitter access tokens.
+
+Make sure the targets of $logFile and $pidFile are writable by the 
+user that tunetwit will be run as. By default these go in the same 
+directory as tunetwit.
+
+Go to the installation directory and run
+
+>  ./tunetwit -o
+  
+Follow the instructions. You will need to paste a URL into your
+browser, log in to your Twitter account, authorise TuneTwit to post
+to it and then enter the PIN which Twitter gives you.
+
+TuneTwit is now ready to go. At first, you may want to run it with 
+the -d option to see what's going on. 
+      
+                             ~*~
+                             
 tunetwit is copyright Chris Hastie 2013 @tipichris
 
 This program is free software; you can redistribute it and/or modify
