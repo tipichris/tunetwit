@@ -1,6 +1,6 @@
 #################################################################################
-# This is the configuration file for tunetwit, a bot to your MPD listening 
-# Twitter. 
+# This is the configuration file for tunetwit, a bot to post your MPD listening 
+# to Twitter. 
 #
 # This is a perl file and must conform to perl syntax
 
