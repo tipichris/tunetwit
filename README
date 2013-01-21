@@ -22,10 +22,10 @@ Copy tunetwit and tunetwit.conf.dist to a directory.
 
 Rename tunetwit.conf.dist to tunetwit.conf
 
-Fill in the blanks. You will need to log in at http://dev.twitter.com
-and register your application to get values for $consumerkey and 
-$consumersecret because Twitter doesn't allow these to be distributed 
-with Open Source software :(
+Fill in the blanks. You will need to log in at 
+https://dev.twitter.com/apps/new and register your application to get
+values for $consumerkey and $consumersecret because Twitter doesn't 
+allow these to be distributed with Open Source software :(
 
 Make sure the directory in which tunetwit resides is writable by the 
 user it will run as - TuneTwit will create a directory .oauth here to 

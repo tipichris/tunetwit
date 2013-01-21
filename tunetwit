@@ -32,9 +32,8 @@ use vars qw($mpdhost $mpdport $mpdpassword
 my $version = '0.1.0';
 
 use strict;          # this turns on strict error checking
-use Audio::MPD;
 use warnings;
-use POSIX;
+use Audio::MPD;
 use File::Pid;
 use Getopt::Std;
 use POSIX qw(setsid);
@@ -89,7 +88,7 @@ unless ( $consumerkey && $consumersecret ) {
   print "*******************************************************************\n";
   print 'You have not configured values for $consumerkey and $consumersecret' . "\n";
   print "in $conffile. You must get these values from \n";
-  print "http://dev.twitter.com\n";
+  print "https://dev.twitter.com/apps/new \n";
   print "*******************************************************************\n";
   exit;
 }
@@ -254,6 +253,14 @@ sub setupoauth {
 
   
   warn "Configuring OAuth\n" if $debug;
+  
+  print qq|
+##############################################################
+Setting up Tunetwit's authorisation
+
+Please wait, it may take a few minutes to contact Twitter...
+
+|;
 
   my $auth_url = eval { $twit->get_authorization_url };
   unless ($auth_url) {
@@ -262,9 +269,6 @@ sub setupoauth {
   }
   
   print qq|
-##############################################################
-Setting up Tunetwit 
-
 To authorise Tunetwit to access your Twitter account, copy and 
 paste this address into your browser:
 
@@ -277,6 +281,8 @@ and hit RETURN here.
 
   my $pin = <STDIN>; # wait for input
   chomp $pin;
+  
+  print "Please wait, verifying with Twitter...\n";
 
   my($access_token, $access_token_secret, $user_id, $screen_name) = eval { $twit->request_access_token(verifier => $pin) }; 
   
@@ -289,8 +295,8 @@ and hit RETURN here.
         return 0;
   }
   
-  print "Tunes will be posted to account: ", $user_id,
-    " (", $screen_name, ")\n";
+  print "\nTunes will be posted to account: ", $user_id,
+    ' (@', $screen_name, ")\n";
    
    # save the data to the auth directory
    unless (open (KEY, ">$authdir/$feedid.keys")) {

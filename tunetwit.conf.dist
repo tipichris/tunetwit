@@ -9,8 +9,8 @@
 # Configuration
 #################################################################################
 
-# TuneTwit's consumer API key for twitter. You need to get these from 
-# dev.twitter.com
+# TuneTwit's consumer API key for twitter. You need to crate these at 
+# https://dev.twitter.com/apps/new 
 
 $consumerkey = "";
 $consumersecret = "";
