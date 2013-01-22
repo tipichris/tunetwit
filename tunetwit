@@ -163,7 +163,7 @@ until ($mpd) {
     Audio::MPD->new( %opts ) ;
   };
   last if $mpd;
-  logEntry ("ERROR connecting to MPD: $@") if $@;
+  logEntry ("Debug: error connecting to MPD: $@") if $@ && $debug;
   sleep $retryint;
 }
 
@@ -180,7 +180,7 @@ until ($dieNow) {
       $mpd->current ;
     };
     last if $song;
-    logEntry ("ERROR retrieving song: $@") if $@;
+    logEntry ("Debug: error retrieving song: $@") if $@ && $debug;
     sleep $retryint;
   }
 
