@@ -173,11 +173,21 @@ my $laststatus = '';
 # start the loop that does the work, checking MPD ever $pollint seconds
 until ($dieNow) {
   
+  ## TO DO: if we catch a signal whilst running $mpd->current $song will be 
+  ## set false when eval returns, overriding the $song = 1 from &signalHandler
+  ## so loop will run again. Testing that $mpd is a reference stops it running
+  ## infinately, but the extra run means a delay of $retryint seconds before
+  ## tunetwit terminates
   $song = '';
   until ($song) {
     $song = eval{ 
       local $SIG{__DIE__} = 'DEFAULT'; 
-      $mpd->current ;
+      logEntry ("Debug: trying to get song...") if $debug;
+      if (ref($mpd)) {
+        $mpd->current;
+      } else {          #no point in continuing to loop if $mpd is no longer a reference
+        1;
+      }
     };
     last if $song;
     logEntry ("Debug: error retrieving song: $@") if $@ && $debug;
