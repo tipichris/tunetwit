@@ -74,7 +74,7 @@ $pidFile = $path . '/' . $daemonName . ".pid";
 $debug = 0;
 $mpdhost = 'localhost';
 $pollint = 3;
-$retryint = 30;
+$retryint = 20;
 $logging = 1; 
 $format = 'Listening to %t by %a';
 
@@ -157,12 +157,12 @@ $opts{'password'} = $mpdhost if $mpdpassword;
 
 
 
-until ($mpd) {
+until ($mpd || $dieNow) {
   $mpd = eval{ 
     local $SIG{__DIE__} = 'DEFAULT'; 
     Audio::MPD->new( %opts ) ;
   };
-  last if $mpd;
+  last if $mpd  || $dieNow;
   logEntry ("Debug: error connecting to MPD: $@") if $@ && $debug;
   sleep $retryint;
 }
@@ -173,13 +173,8 @@ my $laststatus = '';
 # start the loop that does the work, checking MPD ever $pollint seconds
 until ($dieNow) {
   
-  ## TO DO: if we catch a signal whilst running $mpd->current $song will be 
-  ## set false when eval returns, overriding the $song = 1 from &signalHandler
-  ## so loop will run again. Testing that $mpd is a reference stops it running
-  ## infinately, but the extra run means a delay of $retryint seconds before
-  ## tunetwit terminates
   $song = '';
-  until ($song) {
+  until ($song || $dieNow) {
     $song = eval{ 
       local $SIG{__DIE__} = 'DEFAULT'; 
       logEntry ("Debug: trying to get song...") if $debug;
@@ -189,7 +184,7 @@ until ($dieNow) {
         1;
       }
     };
-    last if $song;
+    last if $song || $dieNow;
     logEntry ("Debug: error retrieving song: $@") if $@ && $debug;
     sleep $retryint;
   }
@@ -205,6 +200,7 @@ until ($dieNow) {
       $laststatus = $status;
     }
   }
+  last if $dieNow;      # don't bother with waiting if we're about to die
   sleep $pollint;
 }
 
@@ -348,8 +344,10 @@ sub fatal_exit {
 #########################################################
 # catch signals and end the program if one is caught.
 sub signalHandler {
+  my $signal = shift;
+  logEntry("Caught signal SIG$signal.");
   # break out of various loops
-  $song = $mpd = $dieNow = 1;    
+  $dieNow = 1;    
 }
 
 #########################################################
