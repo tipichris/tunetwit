@@ -20,9 +20,10 @@ $mpdhost = 'localhost';
 # $mpdport
 # $mpdpassword
 
-# the format of the tweet. For details of the format codes
-# see docs for Audio::MPD::Common::Item::Song 
-$format = 'Listening to %t by %a';
+# the format of the tweet. This uses Text::Template - within the {} braces
+# is executed as Perl code. The variables are the attributes of the
+# Audio::MPD::Common::Item::Song object
+$format = 'Listening to {$title}{$artist?" by $artist":""}{($title|$artist)&$name?" on ":""}{$name}';
 
 # interval (in seconds) between polls of MPD
 $pollint = 3;

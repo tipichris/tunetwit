@@ -38,6 +38,7 @@ use File::Pid;
 use Getopt::Std;
 use POSIX qw(setsid);
 use Net::Twitter::Lite;
+use Text::Template;
 
 # a nice safe path
 $ENV{'PATH'} = '';
@@ -76,7 +77,8 @@ $mpdhost = 'localhost';
 $pollint = 3;
 $retryint = 20;
 $logging = 1; 
-$format = 'Listening to %t by %a';
+#$format = 'Listening to %t by %a';
+$format = 'Listening to {$title}{$artist?" by $artist":""}{($title|$artist)&$name?" on ":""}{$name}';
 
 # slurp in the configuration file
 do $conffile;
@@ -118,7 +120,6 @@ unless ($access_token && $access_token_secret) {
   die "Failed to retrieve access tokens\nPerhaps you need to run tunetwit -o to configure OAuth\n";
 }
 
-
 umask 0022;
 
 unless ($debug) {
@@ -148,6 +149,8 @@ my $pidfile = File::Pid->new( { file => $pidFile, } );
 
 $pidfile->write or die "Can't write PID file $pidFile: $!";
 
+my $template = Text::Template->new(TYPE => 'STRING', SOURCE => $format );
+
 # Setup options for Audio::MPD
 my %opts;
 $opts{'host'} = $mpdhost if $mpdhost; 
@@ -168,7 +171,7 @@ until ($mpd || $dieNow) {
 }
 
 # the last status we sent
-my $laststatus = '';
+my $lastsong = '';
 
 # start the loop that does the work, checking MPD ever $pollint seconds
 until ($dieNow) {
@@ -192,16 +195,31 @@ until ($dieNow) {
   # check type of $song as it may not be a reference if it was 
   # set by signalHandler to break the loop
   if ($song && ref($song) eq "Audio::MPD::Common::Item::Song") {
-    my $status = $song->as_string( $format );
-    logEntry("Debug: $status") if $debug;
-    if ($laststatus ne $status) {
+    my $songstring = $song->as_string();
+    logEntry("Debug: $songstring") if $debug;
+    if ($lastsong ne $songstring) {
+      my $status = makestatus($song);
       logEntry ($status);
       tweet ($status);
-      $laststatus = $status;
+      $lastsong = $songstring;
     }
   }
   last if $dieNow;      # don't bother with waiting if we're about to die
   sleep $pollint;
+}
+
+#########################################################
+# Format the status
+# -> reference to Audio::MPD::Common::Item::Song object
+# <- formatted status
+sub makestatus {
+  my $song = shift;
+  my $result = $template->fill_in(HASH => $song);
+  if (defined $result) {
+    return $result;
+  } else {
+    warn "Couldn't fill in template: $Text::Template::ERROR";
+  }
 }
 
 #########################################################
