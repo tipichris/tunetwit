@@ -29,7 +29,7 @@ use vars qw($mpdhost $mpdport $mpdpassword
   $format $pollint $logging $consumerkey $consumersecret
   $logFile $pidFile $retryint $debug $path );
 
-my $version = '0.1.0';
+my $version = '0.2.0';
 
 use strict;          # this turns on strict error checking
 use warnings;
@@ -149,6 +149,7 @@ my $pidfile = File::Pid->new( { file => $pidFile, } );
 
 $pidfile->write or die "Can't write PID file $pidFile: $!";
 
+# create the Text::Template object ready for later
 my $template = Text::Template->new(TYPE => 'STRING', SOURCE => $format );
 
 # Setup options for Audio::MPD
