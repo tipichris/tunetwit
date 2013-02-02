@@ -4,6 +4,8 @@
 #
 # This is a perl file and must conform to perl syntax
 
+# allow utf8 characters in this file
+use utf8
 
 #################################################################################
 # Configuration
