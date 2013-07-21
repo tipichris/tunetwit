@@ -29,7 +29,7 @@ use vars qw($mpdhost $mpdport $mpdpassword
   $format $pollint $logging $consumerkey $consumersecret
   $logFile $pidFile $retryint $debug $path );
 
-my $version = '0.2.0';
+my $version = '0.2.1';
 
 use strict;          # this turns on strict error checking
 use warnings;
@@ -248,8 +248,18 @@ sub tweet {
       local $SIG{__DIE__} = 'DEFAULT'; 
       $twit->update($status) 
     };
-    
-    logEntry ("ERROR updating twitter status: $@") if $@;
+
+    if ( $@ ) {
+      if ( blessed $@ && $@->isa('Net::Twitter::Lite::Error') ) {
+          #... use the thrown error obj
+          logEntry ("ERROR updating twitter status: " . $@->error) ;
+      }
+      else {
+          # something bad happened!
+          die $@;
+      }
+    }
+    #logEntry ("ERROR updating twitter status: $@") if $@;
   }
 }
 
