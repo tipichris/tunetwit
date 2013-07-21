@@ -37,7 +37,8 @@ use Audio::MPD;
 use File::Pid;
 use Getopt::Std;
 use POSIX qw(setsid);
-use Net::Twitter::Lite;
+use Net::Twitter::Lite::WithAPIv1_1;
+use Scalar::Util 'blessed';
 use Text::Template;
 
 # a nice safe path
@@ -102,7 +103,7 @@ if (! -d $authdir) {
 } 
 
 # Initiate the Net::Twitter::Lite object.
-my $twit = Net::Twitter::Lite->new(
+my $twit = Net::Twitter::Lite::WithAPIv1_1->new(
   consumer_key    => $consumerkey,
   consumer_secret => $consumersecret,
   clientname => 'TuneTwit',
